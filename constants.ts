@@ -1,15 +1,50 @@
-import { EditFunction, ImageStyle, AspectRatio, CameraAngle, LightingStyle } from './types';
+import { EditFunction, ImageStyle, AspectRatio, CameraAngle, LightingStyle, LookMode, ArtistStyle, TrendMode } from './types';
+
+export const LOOK_MODES = [
+  { id: LookMode.Lookbook, icon: '👗', name: 'Lookbook de Estilo' },
+  { id: LookMode.Headshots, icon: '💼', name: 'Fotos Profissionais' },
+];
+
+export const TREND_MODES = [
+  { id: TrendMode.Doll, icon: '🧍', name: 'Boneco' },
+  { id: TrendMode.Bust, icon: '🗿', name: 'Busto' },
+  { id: TrendMode.Funko, icon: '🦸', name: 'Funko' },
+];
+
+export const LOOKBOOK_STYLES = [
+  'Clássico / Casual', 'Streetwear', 'Vintage', 'Gótico', 'Preppy', 'Minimalista',
+  'Athleisure', 'Old Money / Luxo Discreto', 'Boêmio (Boho)', 'Business Casual',
+  'Grunge anos 90', 'Coquetel / Formal'
+];
+
+export const LOOKBOOK_PROMPTS = [
+  { id: 'Look 1', base: 'uma foto de corpo inteiro, em pé' },
+  { id: 'Look 2', base: 'uma foto de meio corpo, sorrindo' },
+  { id: 'Look 3', base: 'uma foto espontânea andando' },
+  { id: 'Look 4', base: 'uma foto mostrando detalhes da roupa' },
+  { id: 'Look 5', base: 'uma pose sentada' },
+  { id: 'Look 6', base: 'uma foto em close-up focando nos acessórios' },
+];
+
+export const HEADSHOT_PROMPTS = [
+  { id: 'Terno Executivo', base: 'vestindo um terno escuro com uma camisa branca impecável' },
+  { id: 'Casual Elegante', base: 'vestindo um suéter de malha casual elegante sobre uma camisa de colarinho' },
+  { id: 'Profissional Criativo', base: 'vestindo uma gola alta escura' },
+  { id: 'Visual Corporativo', base: 'vestindo uma camisa social azul clara' },
+  { id: 'Moderno e Vibrante', base: 'vestindo um blazer colorido' },
+  { id: 'Descontraído', base: 'vestindo uma camiseta simples de alta qualidade sob uma jaqueta casual' },
+];
 
 export const EDIT_FUNCTIONS = [
   { id: EditFunction.Retouch, icon: '🎯', name: 'Retoque' },
+  { id: EditFunction.Inpainting, icon: '🖌️', name: 'Pintura Mágica' },
   { id: EditFunction.ControlNet, icon: '💃', name: 'ControlNet Pose' },
-  { id: EditFunction.Inpainting, icon: '🖌️', name: 'Pintar Área' },
   { id: EditFunction.BackgroundRemoval, icon: '✂️', name: 'Remover Fundo' },
   { id: EditFunction.RemoveWatermark, icon: '💧', name: "Remover Marca D'água" },
   { id: EditFunction.Expand, icon: '↔️', name: 'Expandir' },
   { id: EditFunction.Restore, icon: '🪄', name: 'Restauração' },
   { id: EditFunction.Colorize, icon: '🌈', name: 'Colorização' },
-  { id: EditFunction.SelectiveColor, icon: '🎨', name: 'Ajuste de Cor' },
+  { id: EditFunction.SelectiveColor, icon: '🎨', name: 'Troca de Cor' },
   { id: EditFunction.Compose, icon: '🖼️', name: 'Combinar' },
 ];
 
@@ -45,6 +80,19 @@ export const LIGHTING_STYLES: { id: LightingStyle; name: string; description: st
   { id: LightingStyle.RimLight, name: 'Luz de Contorno', description: ', rim lighting, edge lighting' },
   { id: LightingStyle.HardLight, name: 'Luz Dura', description: ', hard lighting, harsh shadows, direct light' },
   { id: LightingStyle.SoftLight, name: 'Luz Suave', description: ', soft lighting, diffused light, soft shadows' },
+];
+
+export const ARTIST_STYLES: { id: ArtistStyle; name: string; description: string }[] = [
+  { id: ArtistStyle.VanGogh, name: 'Van Gogh', description: ', in the expressive, post-impressionist style of Vincent van Gogh, with thick impasto brushstrokes and bold colors' },
+  { id: ArtistStyle.DaVinci, name: 'Da Vinci', description: ', in the high renaissance style of Leonardo da Vinci, with sfumato lighting and anatomical precision' },
+  { id: ArtistStyle.Dali, name: 'Salvador Dalí', description: ', in the surrealist style of Salvador Dalí, with dreamlike landscapes and bizarre imagery' },
+  { id: ArtistStyle.Picasso, name: 'Picasso', description: ', in the cubist style of Pablo Picasso, with fragmented objects and multiple viewpoints' },
+  { id: ArtistStyle.Monet, name: 'Monet', description: ', in the impressionist style of Claude Monet, capturing the effects of light with visible brushstrokes' },
+  { id: ArtistStyle.Warhol, name: 'Andy Warhol', description: ', in the pop art style of Andy Warhol, with bold colors and screen-printing effects' },
+  { id: ArtistStyle.Rembrandt, name: 'Rembrandt', description: ', in the baroque style of Rembrandt, with dramatic use of chiaroscuro (light and shadow)' },
+  { id: ArtistStyle.Kahlo, name: 'Frida Kahlo', description: ', in the surrealist, folk art style of Frida Kahlo, with vibrant colors and symbolic self-portrait elements' },
+  { id: ArtistStyle.Hokusai, name: 'Hokusai', description: ', in the Japanese ukiyo-e woodblock print style of Hokusai, with stylized lines and flat areas of color' },
+  { id: ArtistStyle.Mucha, name: 'Alphonse Mucha', description: ', in the Art Nouveau style of Alphonse Mucha, with elegant, flowing lines and decorative floral motifs' },
 ];
 
 export const STYLE_OPTIONS = [

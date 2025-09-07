@@ -1,12 +1,24 @@
 export enum Mode {
   Create = 'create',
   Edit = 'edit',
+  Look = 'look',
+  Trend = 'trend',
+}
+
+export enum TrendMode {
+  Doll = 'doll',
+  Bust = 'bust',
+  Funko = 'funko',
+}
+
+export enum LookMode {
+  Lookbook = 'lookbook',
+  Headshots = 'headshots',
 }
 
 export enum EditFunction {
   RemoveWatermark = 'remove-watermark',
   Retouch = 'retouch',
-  Inpainting = 'inpainting',
   Expand = 'expand',
   Compose = 'compose',
   Restore = 'restore',
@@ -14,6 +26,7 @@ export enum EditFunction {
   BackgroundRemoval = 'background-removal',
   SelectiveColor = 'selective-color',
   ControlNet = 'controlnet',
+  Inpainting = 'inpainting',
 }
 
 export enum ImageStyle {
@@ -61,6 +74,19 @@ export enum LightingStyle {
   RimLight = 'rim-light',
   HardLight = 'hard-light',
   SoftLight = 'soft-light',
+}
+
+export enum ArtistStyle {
+  VanGogh = 'van-gogh',
+  DaVinci = 'da-vinci',
+  Dali = 'dali',
+  Picasso = 'picasso',
+  Monet = 'monet',
+  Warhol = 'warhol',
+  Rembrandt = 'rembrandt',
+  Kahlo = 'kahlo',
+  Hokusai = 'hokusai',
+  Mucha = 'mucha',
 }
 
 

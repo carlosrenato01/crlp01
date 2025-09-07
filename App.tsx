@@ -1,8 +1,8 @@
 
-import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { Mode, EditFunction, ImageStyle, AspectRatio, CameraAngle, LightingStyle } from './types';
+import React, { useState, useCallback, useRef, useEffect, useImperativeHandle, forwardRef } from 'react';
+import { Mode, EditFunction, ImageStyle, AspectRatio, CameraAngle, LightingStyle, LookMode, ArtistStyle, TrendMode } from './types';
 import type { ImageFile } from './types';
-import { EDIT_FUNCTIONS, STYLE_OPTIONS, ASPECT_RATIOS, CAMERA_ANGLES, LIGHTING_STYLES } from './constants';
+import { EDIT_FUNCTIONS, STYLE_OPTIONS, ASPECT_RATIOS, CAMERA_ANGLES, LIGHTING_STYLES, ARTIST_STYLES, LOOK_MODES, HEADSHOT_PROMPTS, LOOKBOOK_PROMPTS, LOOKBOOK_STYLES, TREND_MODES } from './constants';
 import { geminiService } from './services/geminiService';
 
 // To avoid re-definition on every render, helper components are defined outside the main component.
@@ -16,136 +16,6 @@ const FunctionCard: React.FC<FunctionCardProps> = (props) => {
     return (
         <div {...props}>
             {props.children}
-        </div>
-    );
-}
-
-// Inpainting Editor Component
-interface ImageMaskEditorProps {
-    imageSrc: string;
-    onMaskChange: (maskFile: ImageFile | null) => void;
-    key: string;
-    title: string;
-}
-const ImageMaskEditor: React.FC<ImageMaskEditorProps> = ({ imageSrc, onMaskChange, title }) => {
-    const imageCanvasRef = useRef<HTMLCanvasElement>(null);
-    const maskCanvasRef = useRef<HTMLCanvasElement>(null);
-    const [isDrawing, setIsDrawing] = useState(false);
-    const [brushSize, setBrushSize] = useState(30);
-    const [isErasing, setIsErasing] = useState(false);
-
-    useEffect(() => {
-        const image = new Image();
-        image.src = imageSrc;
-        image.onload = () => {
-            const canvas = imageCanvasRef.current;
-            const maskCanvas = maskCanvasRef.current;
-            if (canvas && maskCanvas) {
-                const aspectRatio = image.width / image.height;
-                const maxWidth = canvas.parentElement?.clientWidth || 300;
-                const width = maxWidth;
-                const height = width / aspectRatio;
-                canvas.width = width;
-                canvas.height = height;
-                maskCanvas.width = width;
-                maskCanvas.height = height;
-                const ctx = canvas.getContext('2d');
-                ctx?.drawImage(image, 0, 0, width, height);
-            }
-        };
-    }, [imageSrc]);
-
-    const getMousePos = (canvas: HTMLCanvasElement, evt: React.MouseEvent | React.TouchEvent) => {
-        const rect = canvas.getBoundingClientRect();
-        const touch = (evt as React.TouchEvent).touches?.[0];
-        const clientX = touch ? touch.clientX : (evt as React.MouseEvent).clientX;
-        const clientY = touch ? touch.clientY : (evt as React.MouseEvent).clientY;
-        return {
-            x: clientX - rect.left,
-            y: clientY - rect.top
-        };
-    };
-
-    const draw = (e: React.MouseEvent | React.TouchEvent) => {
-        if (!isDrawing) return;
-        const canvas = maskCanvasRef.current;
-        if (!canvas) return;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return;
-        const { x, y } = getMousePos(canvas, e);
-
-        ctx.globalCompositeOperation = isErasing ? 'destination-out' : 'source-over';
-        ctx.fillStyle = 'rgba(0, 150, 255, 0.7)';
-        ctx.beginPath();
-        ctx.arc(x, y, brushSize / 2, 0, Math.PI * 2);
-        ctx.fill();
-    };
-    
-    const startDrawing = (e: React.MouseEvent | React.TouchEvent) => {
-        setIsDrawing(true);
-        draw(e);
-    };
-
-    const stopDrawing = () => {
-        setIsDrawing(false);
-        const maskCanvas = maskCanvasRef.current;
-        if (!maskCanvas) return;
-        
-        // Create the final black and white mask
-        const exportCanvas = document.createElement('canvas');
-        exportCanvas.width = maskCanvas.width;
-        exportCanvas.height = maskCanvas.height;
-        const exportCtx = exportCanvas.getContext('2d');
-        if (!exportCtx) return;
-
-        exportCtx.drawImage(maskCanvas, 0, 0);
-        const imageData = exportCtx.getImageData(0, 0, exportCanvas.width, exportCanvas.height);
-        const data = imageData.data;
-        for (let i = 0; i < data.length; i += 4) {
-            if (data[i + 3] > 0) { // If pixel from mask is not transparent
-                data[i] = 255;     // R
-                data[i + 1] = 255; // G
-                data[i + 2] = 255; // B
-            } else { // if transparent
-                data[i] = 0;
-                data[i + 1] = 0;
-                data[i + 2] = 0;
-            }
-            data[i + 3] = 255; // Make mask fully opaque
-        }
-        exportCtx.putImageData(imageData, 0, 0);
-
-        const dataUrl = exportCanvas.toDataURL('image/png');
-        const base64 = dataUrl.substring(dataUrl.indexOf(',') + 1);
-        onMaskChange({ base64, mimeType: 'image/png' });
-    };
-
-    return (
-        <div className="flex flex-col gap-3">
-            <div className="text-base font-semibold text-gray-300">{title}</div>
-            <div className="relative w-full cursor-crosshair">
-                <canvas ref={imageCanvasRef} className="rounded-lg w-full" />
-                <canvas 
-                    ref={maskCanvasRef} 
-                    className="absolute top-0 left-0 w-full"
-                    onMouseDown={startDrawing}
-                    onMouseMove={draw}
-                    onMouseUp={stopDrawing}
-                    onMouseOut={stopDrawing}
-                    onTouchStart={startDrawing}
-                    onTouchMove={draw}
-                    onTouchEnd={stopDrawing}
-                />
-            </div>
-             <div className="flex flex-col gap-2 p-2 bg-black/20 backdrop-blur-sm rounded-md">
-                <div className="flex items-center gap-2">
-                    <label htmlFor="brushSize" className="text-sm">Pincel:</label>
-                    <input type="range" id="brushSize" min="5" max="100" value={brushSize} onChange={(e) => setBrushSize(Number(e.target.value))} className="w-full" />
-                </div>
-                <button onClick={() => setIsErasing(!isErasing)} className={`w-full p-2 rounded-md text-sm ${isErasing ? 'bg-blue-600' : 'bg-gray-600'}`}>
-                    {isErasing ? 'Borracha' : 'Pincel'}
-                </button>
-             </div>
         </div>
     );
 }
@@ -166,7 +36,7 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({ onCapture, onClose }) => 
         const startCamera = async () => {
             try {
                 if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-                    const mediaStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+                    const mediaStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
                     activeStream = mediaStream;
                     setStream(mediaStream);
                     if (videoRef.current) {
@@ -197,7 +67,8 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({ onCapture, onClose }) => 
             canvas.width = video.videoWidth;
             canvas.height = video.videoHeight;
             const context = canvas.getContext('2d');
-            context?.drawImage(video, 0, 0, video.videoWidth, video.videoHeight);
+            context?.scale(-1, 1);
+            context?.drawImage(video, -canvas.width, 0, canvas.width, canvas.height);
             
             const dataUrl = canvas.toDataURL('image/png');
             const mimeType = 'image/png';
@@ -221,7 +92,7 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({ onCapture, onClose }) => 
     return (
         <div className="fixed inset-0 bg-black/90 flex flex-col items-center justify-center p-4 z-50">
             <div className="relative w-full max-w-2xl">
-                <video ref={videoRef} autoPlay playsInline className="w-full rounded-lg shadow-2xl"></video>
+                <video ref={videoRef} autoPlay playsInline className="w-full rounded-lg shadow-2xl transform -scale-x-100"></video>
                 <canvas ref={canvasRef} className="hidden"></canvas>
             </div>
             <div className="mt-6 flex gap-4">
@@ -294,19 +165,330 @@ const ImageCompareSlider: React.FC<ImageCompareSliderProps> = ({ beforeSrc, afte
     );
 };
 
+type EditorTool = 'brush' | 'eraser' | 'pan';
+interface ImageMaskEditorProps {
+    imageFile: ImageFile;
+}
+interface ImageMaskEditorRef {
+    getMaskAsImageFile: () => Promise<ImageFile | null>;
+}
+
+const ImageMaskEditor = forwardRef<ImageMaskEditorRef, ImageMaskEditorProps>(({ imageFile }, ref) => {
+    const containerRef = useRef<HTMLDivElement>(null);
+    const imageCanvasRef = useRef<HTMLCanvasElement>(null);
+    const drawingCanvasRef = useRef<HTMLCanvasElement>(null);
+    const imageRef = useRef<HTMLImageElement>(new Image());
+
+    const [tool, setTool] = useState<EditorTool>('brush');
+    const [brushSize, setBrushSize] = useState(40);
+    const [zoom, setZoom] = useState(1);
+    const [offset, setOffset] = useState({ x: 0, y: 0 });
+    const [isDrawing, setIsDrawing] = useState(false);
+    const lastPos = useRef({ x: 0, y: 0 });
+    const [history, setHistory] = useState<ImageData[]>([]);
+    const [historyIndex, setHistoryIndex] = useState(-1);
+
+    const draw = useCallback(() => {
+        const imageCanvas = imageCanvasRef.current;
+        const drawingCanvas = drawingCanvasRef.current;
+        if (!imageCanvas || !drawingCanvas) return;
+
+        const imageCtx = imageCanvas.getContext('2d');
+        const drawingCtx = drawingCanvas.getContext('2d');
+        if (!imageCtx || !drawingCtx) return;
+        
+        imageCtx.clearRect(0, 0, imageCanvas.width, imageCanvas.height);
+        drawingCtx.clearRect(0, 0, drawingCanvas.width, drawingCanvas.height);
+
+        imageCtx.setTransform(zoom, 0, 0, zoom, offset.x, offset.y);
+        drawingCtx.setTransform(zoom, 0, 0, zoom, offset.x, offset.y);
+        
+        imageCtx.drawImage(imageRef.current, 0, 0);
+
+        if (historyIndex >= 0) {
+            drawingCtx.putImageData(history[historyIndex], 0, 0);
+        }
+
+    }, [zoom, offset, history, historyIndex]);
+
+    useEffect(() => {
+        const image = imageRef.current;
+        const imageCanvas = imageCanvasRef.current;
+        const drawingCanvas = drawingCanvasRef.current;
+        if (!imageCanvas || !drawingCanvas) return;
+
+        image.onload = () => {
+            const container = containerRef.current;
+            if (!container) return;
+
+            const containerWidth = container.clientWidth;
+            const containerHeight = container.clientHeight;
+            const imgAspectRatio = image.width / image.height;
+            const containerAspectRatio = containerWidth / containerHeight;
+
+            let initialZoom;
+            if (imgAspectRatio > containerAspectRatio) {
+                initialZoom = containerWidth / image.width;
+            } else {
+                initialZoom = containerHeight / image.height;
+            }
+            setZoom(initialZoom);
+            
+            const initialOffsetX = (containerWidth - image.width * initialZoom) / 2;
+            const initialOffsetY = (containerHeight - image.height * initialZoom) / 2;
+            setOffset({ x: initialOffsetX, y: initialOffsetY });
+
+            imageCanvas.width = image.width;
+            imageCanvas.height = image.height;
+            drawingCanvas.width = image.width;
+            drawingCanvas.height = image.height;
+
+            const drawingCtx = drawingCanvas.getContext('2d');
+            if (drawingCtx) {
+                const initialImageData = drawingCtx.createImageData(image.width, image.height);
+                setHistory([initialImageData]);
+                setHistoryIndex(0);
+            }
+        };
+
+        image.src = `data:${imageFile.mimeType};base64,${imageFile.base64}`;
+    }, [imageFile]);
+    
+    useEffect(draw, [draw]);
+
+    const getCoords = (e: React.MouseEvent | React.TouchEvent | MouseEvent | TouchEvent) => {
+        const canvas = drawingCanvasRef.current;
+        if (!canvas) return { x: 0, y: 0 };
+        const rect = canvas.getBoundingClientRect();
+        const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+        const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+        return {
+            x: (clientX - rect.left - offset.x) / zoom,
+            y: (clientY - rect.top - offset.y) / zoom,
+        };
+    };
+
+    const handleMouseDown = (e: React.MouseEvent | React.TouchEvent) => {
+        setIsDrawing(true);
+        const coords = getCoords(e.nativeEvent);
+        lastPos.current = coords;
+        if (tool === 'brush' || tool === 'eraser') {
+            const canvas = drawingCanvasRef.current;
+            const ctx = canvas?.getContext('2d', { willReadFrequently: true });
+            if (ctx) {
+                const newHistory = history.slice(0, historyIndex + 1);
+                const currentImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                setHistory([...newHistory, currentImageData]);
+                setHistoryIndex(newHistory.length);
+            }
+        }
+    };
+    
+    const drawLine = (x1: number, y1: number, x2: number, y2: number) => {
+        const ctx = drawingCanvasRef.current?.getContext('2d');
+        if (!ctx) return;
+        
+        ctx.strokeStyle = `rgba(0, 255, 0, 0.7)`;
+        ctx.lineWidth = brushSize;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        
+        if (tool === 'eraser') {
+            ctx.globalCompositeOperation = 'destination-out';
+        } else {
+            ctx.globalCompositeOperation = 'source-over';
+        }
+        
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
+    };
+
+    const handleMouseMove = (e: React.MouseEvent | React.TouchEvent) => {
+        if (!isDrawing) return;
+        const coords = getCoords(e.nativeEvent);
+        if (tool === 'pan') {
+            const dx = coords.x - lastPos.current.x;
+            const dy = coords.y - lastPos.current.y;
+            setOffset(prev => ({ x: prev.x + dx * zoom, y: prev.y + dy * zoom }));
+        } else {
+            drawLine(lastPos.current.x, lastPos.current.y, coords.x, coords.y);
+            lastPos.current = coords;
+        }
+    };
+
+    const handleMouseUp = () => {
+        setIsDrawing(false);
+        if (tool === 'brush' || tool === 'eraser') {
+             const canvas = drawingCanvasRef.current;
+             const ctx = canvas?.getContext('2d', { willReadFrequently: true });
+             if(ctx) {
+                const newImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                const newHistory = [...history];
+                newHistory[historyIndex] = newImageData;
+                setHistory(newHistory);
+             }
+        }
+    };
+    
+    const handleWheel = (e: React.WheelEvent) => {
+        e.preventDefault();
+        const scaleAmount = -e.deltaY * 0.001;
+        const newZoom = Math.max(0.1, Math.min(10, zoom * (1 + scaleAmount)));
+        
+        const rect = drawingCanvasRef.current!.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
+
+        const newOffsetX = mouseX - (mouseX - offset.x) * (newZoom / zoom);
+        const newOffsetY = mouseY - (mouseY - offset.y) * (newZoom / zoom);
+
+        setOffset({ x: newOffsetX, y: newOffsetY });
+        setZoom(newZoom);
+    };
+    
+    const undo = () => {
+        if (historyIndex > 0) {
+            setHistoryIndex(prev => prev - 1);
+            const ctx = drawingCanvasRef.current?.getContext('2d');
+            if(ctx) {
+                 ctx.clearRect(0, 0, drawingCanvasRef.current!.width, drawingCanvasRef.current!.height);
+                 ctx.putImageData(history[historyIndex - 1], 0, 0);
+            }
+        }
+    };
+
+    const redo = () => {
+        if (historyIndex < history.length - 1) {
+            setHistoryIndex(prev => prev + 1);
+            const ctx = drawingCanvasRef.current?.getContext('2d');
+            if(ctx) {
+                 ctx.clearRect(0, 0, drawingCanvasRef.current!.width, drawingCanvasRef.current!.height);
+                 ctx.putImageData(history[historyIndex + 1], 0, 0);
+            }
+        }
+    };
+
+    useImperativeHandle(ref, () => ({
+        getMaskAsImageFile: async (): Promise<ImageFile | null> => {
+            const drawingCanvas = drawingCanvasRef.current;
+            if (!drawingCanvas || historyIndex < 0) return null;
+
+            const maskCanvas = document.createElement('canvas');
+            maskCanvas.width = imageRef.current.width;
+            maskCanvas.height = imageRef.current.height;
+            const maskCtx = maskCanvas.getContext('2d', { willReadFrequently: true });
+            if (!maskCtx) return null;
+
+            maskCtx.putImageData(history[historyIndex], 0, 0);
+
+            const imageData = maskCtx.getImageData(0, 0, maskCanvas.width, maskCanvas.height);
+            const data = imageData.data;
+            let hasMask = false;
+            for (let i = 0; i < data.length; i += 4) {
+                if (data[i + 3] > 0) { // If alpha > 0, pixel is part of the mask
+                    data[i] = 255;     // R
+                    data[i + 1] = 255;   // G
+                    data[i + 2] = 255;   // B
+                    data[i + 3] = 255;   // Alpha
+                    hasMask = true;
+                } else { // Not part of mask, make it black
+                    data[i] = 0;
+                    data[i+1] = 0;
+                    data[i+2] = 0;
+                    data[i+3] = 255;
+                }
+            }
+
+            if (!hasMask) return null;
+
+            maskCtx.putImageData(imageData, 0, 0);
+            const dataUrl = maskCanvas.toDataURL('image/png');
+            const base64 = dataUrl.substring(dataUrl.indexOf(',') + 1);
+            return { base64, mimeType: 'image/png' };
+        }
+    }));
+    
+    const ToolButton = ({ id, icon, label }: {id: EditorTool, icon: string, label: string}) => (
+         <button 
+            className={`flex flex-col items-center justify-center p-2 rounded-lg transition-colors w-16 ${tool === id ? 'bg-blue-600 text-white' : 'bg-gray-700 hover:bg-gray-600'}`}
+            onClick={() => setTool(id)}
+            title={label}
+        >
+            <span className="text-2xl">{icon}</span>
+            <span className="text-xs font-semibold">{label}</span>
+        </button>
+    )
+
+    return (
+        <div className="w-full h-[60vh] md:h-full flex flex-col gap-4">
+            <div className="flex-grow relative bg-gray-900/50 rounded-lg overflow-hidden" ref={containerRef} onWheel={handleWheel}>
+                 <canvas
+                    ref={imageCanvasRef}
+                    className="absolute top-0 left-0"
+                    style={{ transformOrigin: '0 0' }}
+                 />
+                 <canvas
+                    ref={drawingCanvasRef}
+                    className={`absolute top-0 left-0 ${tool === 'pan' ? 'cursor-move' : 'cursor-crosshair'}`}
+                    style={{ transformOrigin: '0 0' }}
+                    onMouseDown={(e) => handleMouseDown(e)}
+                    onMouseMove={(e) => handleMouseMove(e)}
+                    onMouseUp={handleMouseUp}
+                    onMouseLeave={handleMouseUp}
+                    onTouchStart={(e) => handleMouseDown(e)}
+                    onTouchMove={(e) => handleMouseMove(e)}
+                    onTouchEnd={handleMouseUp}
+                />
+            </div>
+             <div className="flex-shrink-0 bg-gray-800/50 p-3 rounded-lg flex flex-wrap items-center justify-center gap-3">
+                 <div className="flex gap-2">
+                    <ToolButton id="brush" icon="🖌️" label="Pincel" />
+                    <ToolButton id="eraser" icon="🧼" label="Borracha" />
+                    <ToolButton id="pan" icon="🖐️" label="Mover" />
+                </div>
+                <div className="flex items-center gap-2">
+                    <label htmlFor="brushSize" className="text-sm font-semibold">Tamanho:</label>
+                    <input
+                        type="range"
+                        id="brushSize"
+                        min="5"
+                        max="150"
+                        value={brushSize}
+                        onChange={(e) => setBrushSize(Number(e.target.value))}
+                        className="w-24"
+                    />
+                </div>
+                <div className="flex gap-2">
+                    <button onClick={undo} disabled={historyIndex <= 0} className="px-3 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-xl disabled:opacity-50 disabled:cursor-not-allowed" title="Desfazer">↩️</button>
+                    <button onClick={redo} disabled={historyIndex >= history.length - 1} className="px-3 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-xl disabled:opacity-50 disabled:cursor-not-allowed" title="Refazer">↪️</button>
+                </div>
+                 <div className="flex items-center gap-2">
+                     <button onClick={() => setZoom(z => Math.max(0.1, z-0.2))} className="px-3 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-xl" title="Zoom Out">-</button>
+                     <span className="text-sm font-semibold w-10 text-center">{(zoom * 100).toFixed(0)}%</span>
+                     <button onClick={() => setZoom(z => Math.min(10, z+0.2))} className="px-3 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-xl" title="Zoom In">+</button>
+                 </div>
+            </div>
+        </div>
+    );
+});
+
 
 const App: React.FC = () => {
     const [mode, setMode] = useState<Mode>(Mode.Create);
     const [editFunction, setEditFunction] = useState<EditFunction>(EditFunction.Retouch);
+    const [selectedLook, setSelectedLook] = useState<LookMode>(LookMode.Lookbook);
+    const [selectedTrendMode, setSelectedTrendMode] = useState<TrendMode>(TrendMode.Doll);
     const [selectedStyle, setSelectedStyle] = useState<ImageStyle | null>(ImageStyle.Realistic);
     const [prompt, setPrompt] = useState('');
     const [aspectRatio, setAspectRatio] = useState<AspectRatio>('1:1');
     const [cameraAngle, setCameraAngle] = useState<CameraAngle | null>(null);
     const [lightingStyle, setLightingStyle] = useState<LightingStyle | null>(null);
+    const [artistStyle, setArtistStyle] = useState<ArtistStyle | null>(null);
     const [expansionAspectRatio, setExpansionAspectRatio] = useState<AspectRatio | null>(null);
     const [image1, setImage1] = useState<ImageFile | null>(null);
     const [combineImages, setCombineImages] = useState<(ImageFile | null)[]>(Array(4).fill(null));
-    const [maskImage, setMaskImage] = useState<ImageFile | null>(null);
     const [generatedImage, setGeneratedImage] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -318,11 +500,24 @@ const App: React.FC = () => {
     const [originalForCompare, setOriginalForCompare] = useState<ImageFile | null>(null);
     const [isComparing, setIsComparing] = useState(false);
     
+    // Inpainting ref
+    const maskEditorRef = useRef<ImageMaskEditorRef>(null);
+
     // Sticker specific options
     const [stickerBorderStyle, setStickerBorderStyle] = useState<'outline' | 'dashed' | 'none'>('outline');
     const [stickerHasShadow, setStickerHasShadow] = useState(false);
     const [stickerBackgroundType, setStickerBackgroundType] = useState<'transparent' | 'solid'>('transparent');
     const [stickerBackgroundColor, setStickerBackgroundColor] = useState('#FFFFFF');
+    
+    // Trends state
+    const [activelyGeneratingTrend, setActivelyGeneratingTrend] = useState<string | null>(null);
+    // Lookbook State
+    const [lookbookStyle, setLookbookStyle] = useState(LOOKBOOK_STYLES[0]);
+    const [customLookbookStyle, setCustomLookbookStyle] = useState('');
+    // Headshot state
+    const [headshotExpression, setHeadshotExpression] = useState('Sorrido Amigável');
+    const [headshotPose, setHeadshotPose] = useState('Frente');
+
 
     // Zoom and Pan state
     const [scale, setScale] = useState(1);
@@ -330,6 +525,20 @@ const App: React.FC = () => {
     const [isDragging, setIsDragging] = useState(false);
     const startDragPos = useRef({ x: 0, y: 0 });
 
+    const RadioPill: React.FC<{name: string, value: string, label: string, checked: boolean, onChange: (e: React.ChangeEvent<HTMLInputElement>) => void}> = ({ name, value, label, checked, onChange }) => (
+        <label className={`cursor-pointer px-3 py-1.5 text-xs rounded-full transition-colors font-semibold 
+            ${checked ? 'bg-blue-600 text-white' : 'bg-gray-800 hover:bg-gray-700 text-gray-300'}`}>
+            <input
+                type="radio"
+                name={name}
+                value={value}
+                checked={checked}
+                onChange={onChange}
+                className="hidden"
+            />
+            {label}
+        </label>
+    );
 
      useEffect(() => {
         if (editFunction !== EditFunction.Expand) {
@@ -361,8 +570,6 @@ const App: React.FC = () => {
             setImage1(imageFile);
             setCombineImages(Array(4).fill(null));
         }
-
-        setMaskImage(null); // Reset mask on new image
         resetEditHistory(); // New image starts a new session
         resetCompare();
     };
@@ -428,23 +635,121 @@ const App: React.FC = () => {
         });
     };
 
+    const getModelInstruction = (lookMode: LookMode, prompt: {id: string, base: string}) => {
+        switch (lookMode) {
+            case LookMode.Headshots: {
+                const poseInstruction = headshotPose === 'Frente' ? 'olhando para a frente para a câmera' : 'posicionado em um leve ângulo para a câmera';
+                return `A maior prioridade é manter as características faciais exatas, a semelhança e o gênero percebido da pessoa na foto de referência fornecida. Transforme a imagem em um retrato profissional. A pessoa deve estar ${poseInstruction} com uma expressão de "${headshotExpression}". Ela deve estar ${prompt.base}. Por favor, mantenha o penteado original da foto. O fundo deve ser um estúdio limpo, neutro e desfocado (como cinza claro, bege ou branco). Não altere a estrutura facial central da pessoa. A imagem final deve ser um retrato profissional bem iluminado e de alta qualidade.`;
+            }
+            case LookMode.Lookbook: {
+                const finalStyle = lookbookStyle === 'Outro' ? customLookbookStyle : lookbookStyle;
+                return `A maior prioridade é manter as características faciais exatas, a semelhança e o gênero percebido da pessoa na foto de referência fornecida. Transforme a imagem em uma foto de lookbook de alta moda. O estilo de moda geral para todo o lookbook é "${finalStyle}". Para esta foto específica, crie uma roupa única e estilosa que se encaixe no estilo geral e coloque a pessoa em ${prompt.base} em um ambiente adequado e elegante. O cabelo e a maquiagem da pessoa também devem complementar o estilo. Cada foto no lookbook deve apresentar uma roupa diferente. Não altere a estrutura facial central da pessoa.`;
+            }
+            default:
+                return `Crie uma imagem com base na foto de referência e neste prompt: ${prompt.base}`;
+        }
+    };
+    
+    const generateSingleTrendImage = async (promptData: { id: string; base: string }) => {
+        if (isLoading) return;
+        if (!image1) {
+            setError("Por favor, envie uma imagem para continuar.");
+            return;
+        }
+        if (selectedLook === LookMode.Lookbook && (lookbookStyle === '' || (lookbookStyle === 'Outro' && customLookbookStyle.trim() === ''))) {
+            setError("Por favor, escolha ou insira um estilo de moda para seu lookbook!");
+            return;
+        }
+
+        setIsLoading(true);
+        setActivelyGeneratingTrend(promptData.id);
+        setGeneratedImage(null);
+        setError(null);
+        resetCompare();
+        if (image1) setOriginalForCompare(image1);
+
+        try {
+            const modelInstruction = getModelInstruction(selectedLook, promptData);
+            const resultBase64 = await geminiService.editImage(modelInstruction, [image1]);
+            const imageUrl = `data:image/png;base64,${resultBase64}`;
+
+            setEditHistory(prev => ({
+                undo: [...prev.undo, generatedImage].filter(Boolean) as string[],
+                redo: [],
+            }));
+            setGeneratedImage(imageUrl);
+            resetImageView();
+            setHistory(prev => [imageUrl, ...prev]);
+            if (window.innerWidth < 768) setIsModalOpen(true);
+
+        } catch (e: any) {
+            setError(e.message || 'Ocorreu um erro desconhecido.');
+        } finally {
+            setIsLoading(false);
+            setActivelyGeneratingTrend(null);
+        }
+    };
+
     const generateImage = async () => {
         if (isLoading) return;
         setError(null);
         resetCompare();
+        
+        if (mode === Mode.Trend) {
+            if (!image1) {
+                setError("Por favor, envie uma imagem para continuar.");
+                return;
+            }
+            setIsLoading(true);
+            setGeneratedImage(null);
+            setOriginalForCompare(image1);
 
-        const promptOptionalInEdit: EditFunction[] = [EditFunction.Expand, EditFunction.Restore, EditFunction.Colorize, EditFunction.RemoveWatermark, EditFunction.BackgroundRemoval];
-        const isPromptOptional = mode === Mode.Edit && promptOptionalInEdit.includes(editFunction);
+            try {
+                let finalPrompt = '';
+                if (selectedTrendMode === TrendMode.Doll) {
+                    finalPrompt = "A maior prioridade é manter as características faciais exatas, a semelhança e o gênero percebido da pessoa na foto de referência fornecida. Transforme a pessoa em um boneco de resina ou vinil colecionável com uma cabeça grande e estilizada e corpo pequeno, no estilo de um boneco 'bobblehead' artístico. O boneco deve estar em cima de uma mesa de escritório de madeira, com um monitor de computador e teclado desfocados ao fundo. A iluminação deve ser suave, como a de um ambiente de escritório. Não altere a estrutura facial central da pessoa, apenas estilize-a no formato de boneco.";
+                } else if (selectedTrendMode === TrendMode.Funko) {
+                    finalPrompt = "A maior prioridade é manter as características faciais exatas, a semelhança e o gênero percebido da pessoa na foto de referência. Transforme a pessoa em uma figura de vinil colecionável no estilo icônico dos bonecos Funko Pop, com cabeça grande e quadrada, olhos pretos redondos e sem boca. O corpo deve ser pequeno e estilizado. Coloque a figura em pé sobre uma base preta redonda, dentro de sua caixa de colecionador com uma janela transparente. O fundo atrás da caixa deve ser uma prateleira de loja cheia de outras caixas de bonecos coloridos, criando uma cena de colecionador. A iluminação deve ser brilhante e limpa, destacando a figura dentro da caixa.";
+                } else { // Bust
+                    finalPrompt = "A maior prioridade é manter as características faciais exatas, a semelhança e o gênero percebido da pessoa na foto de referência fornecida. Transforme a pessoa em um busto, como se fosse uma escultura, cortado na parte superior do torso. O busto deve estar sobre uma base translúcida sem texto, em cima de uma mesa de madeira escura. Ao fundo, um ambiente de escritório moderno com um monitor de computador desfocado. A iluminação deve ser suave e profissional, destacando os contornos do rosto. Não altere a estrutura facial central da pessoa. A textura do busto deve ser lisa e com um leve brilho, como mármore polido ou resina de alta qualidade.";
+                }
+
+                const resultBase64 = await geminiService.editImage(finalPrompt, [image1]);
+                const finalImage = `data:image/png;base64,${resultBase64}`;
+                
+                setEditHistory(prev => ({
+                    undo: [...prev.undo, generatedImage].filter(Boolean) as string[],
+                    redo: [],
+                }));
+                
+                setGeneratedImage(finalImage);
+                resetImageView();
+                setHistory(prev => [finalImage, ...prev]);
+                if (window.innerWidth < 768) setIsModalOpen(true);
+
+            } catch (e: any) {
+                setError(e.message || 'Ocorreu um erro desconhecido.');
+            } finally {
+                setIsLoading(false);
+            }
+            return; 
+        }
+
+        if (mode === Mode.Edit) {
+            if (!image1 && !showCombineView) {
+                setError("Por favor, envie uma imagem para continuar.");
+                return;
+            }
+        }
+
+        const promptOptionalInEdit: EditFunction[] = [EditFunction.Expand, EditFunction.Restore, EditFunction.Colorize, EditFunction.RemoveWatermark, EditFunction.BackgroundRemoval, EditFunction.Compose];
+        const isPromptOptional = mode === Mode.Edit && (promptOptionalInEdit.includes(editFunction) || editFunction === EditFunction.Inpainting);
 
         if (!prompt.trim() && !isPromptOptional) {
             setError("Por favor, descreva sua ideia.");
             return;
         }
 
-        if (mode === Mode.Edit && editFunction !== EditFunction.Expand && !showCombineView && !image1) {
-            setError("Por favor, envie uma imagem para editar.");
-            return;
-        }
          if (mode === Mode.Edit && editFunction === EditFunction.Expand && !image1) {
             setError("Por favor, envie uma imagem para expandir.");
             return;
@@ -457,10 +762,6 @@ const App: React.FC = () => {
             setError("Por favor, escolha uma proporção para expandir a imagem.");
             return;
         }
-        if (mode === Mode.Edit && editFunction === EditFunction.Inpainting && !maskImage) {
-            setError("Por favor, pinte a área que deseja alterar na imagem.");
-            return;
-        }
         if (mode === Mode.Edit && showCombineView) {
             const validImages = combineImages.filter(Boolean);
             if (validImages.length < 2) {
@@ -468,66 +769,65 @@ const App: React.FC = () => {
                 return;
             }
         }
-
+        
         setIsLoading(true);
         setGeneratedImage(null);
+        
+        const buildStyledPrompt = (basePrompt: string) => {
+             let finalPrompt = basePrompt;
+            if (cameraAngle) {
+                const angleData = CAMERA_ANGLES.find(a => a.id === cameraAngle);
+                if (angleData) finalPrompt += angleData.description;
+            }
+
+            if (lightingStyle) {
+                const lightingData = LIGHTING_STYLES.find(l => l.id === lightingStyle);
+                if (lightingData) finalPrompt += lightingData.description;
+            }
+            
+            if (artistStyle) {
+                const artistData = ARTIST_STYLES.find(a => a.id === artistStyle);
+                if (artistData) finalPrompt += artistData.description;
+            }
+
+            if (selectedStyle) {
+                switch (selectedStyle) {
+                    case ImageStyle.Realistic: finalPrompt += `, in a realistic photographic style, high detail, 4k`; break;
+                    case ImageStyle.Anime: finalPrompt += `, in a vibrant anime and manga style, cel shading`; break;
+                    case ImageStyle.Watercolor: finalPrompt += `, as a beautiful watercolor painting, soft edges`; break;
+                    case ImageStyle.BlackAndWhite: finalPrompt += `, in a dramatic black and white photograph, monochrome, high contrast`; break;
+                    case ImageStyle.Ghibli: finalPrompt += `, in the style of Studio Ghibli, hand-drawn, whimsical, detailed backgrounds, soft painterly look`; break;
+                    case ImageStyle.Pixar: finalPrompt += `, in the style of a 3D Pixar animated movie, vibrant colors, expressive characters, detailed textures, rendered in 3D`; break;
+                    case ImageStyle.Cyberpunk: finalPrompt += `, in a futuristic cyberpunk style, neon lights, dystopian city, high-tech, gritty atmosphere, cinematic lighting`; break;
+                    case ImageStyle.Vaporwave: finalPrompt += `, in a vaporwave aesthetic, pastel pink and blue color palette, retro 80s and 90s style, grid lines, roman statues, nostalgic feel`; break;
+                    case ImageStyle.LineArt: finalPrompt += `, as a clean black and white line art drawing, minimalist, contour lines, no shading, vector style`; break;
+                    case ImageStyle.Sticker:
+                        let stickerPrompt = `, A cute die-cut sticker`;
+                        switch (stickerBorderStyle) {
+                            case 'outline': stickerPrompt += ', with a thick white vinyl die-cut border'; break;
+                            case 'dashed': stickerPrompt += ', with a dashed cut line around it'; break;
+                        }
+                        if (stickerHasShadow) stickerPrompt += ', with a subtle drop shadow effect';
+                        if (stickerBackgroundType === 'transparent') stickerPrompt += ', on a plain white background for easy cutting';
+                        else stickerPrompt += `, on a solid ${stickerBackgroundColor} background`;
+                        finalPrompt += stickerPrompt;
+                        break;
+                    case ImageStyle.Logo: finalPrompt = `minimalist vector logo for ${prompt}, simple, clean, flat design, on a white background`; return finalPrompt; // Return early for logo
+                    case ImageStyle.Comic: finalPrompt += `, in a vibrant comic book art style, bold outlines, cel shading, dynamic action scene`; break;
+                    case ImageStyle.FantasyArt: finalPrompt += `, epic fantasy art, mythical, magical, highly detailed, digital painting, trending on ArtStation`; break;
+                    case ImageStyle.Sketch: finalPrompt += `, as a detailed pencil sketch, hand-drawn, charcoal shading, sketchbook style`; break;
+                    case ImageStyle.Abstract: finalPrompt += `, abstract art, non-representational, vibrant colors, geometric shapes, expressionism`; break;
+                    case ImageStyle.Cinematic: finalPrompt += `, cinematic movie still, dramatic lighting, high detail, photorealistic, wide angle shot, 8k`; break;
+                }
+            }
+            return finalPrompt;
+        };
 
         try {
             let resultBase64: string | null = null;
             if (mode === Mode.Create) {
                 resetCompare();
-                let basePrompt = prompt;
-
-                if (cameraAngle) {
-                    const angleData = CAMERA_ANGLES.find(a => a.id === cameraAngle);
-                    if (angleData) basePrompt += angleData.description;
-                }
-
-                if (lightingStyle) {
-                    const lightingData = LIGHTING_STYLES.find(l => l.id === lightingStyle);
-                    if (lightingData) basePrompt += lightingData.description;
-                }
-
-                let finalPrompt = basePrompt;
-                if (selectedStyle) {
-                    switch (selectedStyle) {
-                        case ImageStyle.Realistic: finalPrompt = `${basePrompt}, in a realistic photographic style, high detail, 4k`; break;
-                        case ImageStyle.Anime: finalPrompt = `${basePrompt}, in a vibrant anime and manga style, cel shading`; break;
-                        case ImageStyle.Watercolor: finalPrompt = `${basePrompt}, as a beautiful watercolor painting, soft edges`; break;
-                        case ImageStyle.BlackAndWhite: finalPrompt = `${basePrompt}, in a dramatic black and white photograph, monochrome, high contrast`; break;
-                        case ImageStyle.Ghibli: finalPrompt = `${basePrompt}, in the style of Studio Ghibli, hand-drawn, whimsical, detailed backgrounds, soft painterly look`; break;
-                        case ImageStyle.Pixar: finalPrompt = `${basePrompt}, in the style of a 3D Pixar animated movie, vibrant colors, expressive characters, detailed textures, rendered in 3D`; break;
-                        case ImageStyle.Cyberpunk: finalPrompt = `${basePrompt}, in a futuristic cyberpunk style, neon lights, dystopian city, high-tech, gritty atmosphere, cinematic lighting`; break;
-                        case ImageStyle.Vaporwave: finalPrompt = `${basePrompt}, in a vaporwave aesthetic, pastel pink and blue color palette, retro 80s and 90s style, grid lines, roman statues, nostalgic feel`; break;
-                        case ImageStyle.LineArt: finalPrompt = `${basePrompt}, as a clean black and white line art drawing, minimalist, contour lines, no shading, vector style`; break;
-                        case ImageStyle.Sticker:
-                            let stickerPrompt = `A cute die-cut sticker of ${basePrompt}, high quality vector art`;
-                            switch (stickerBorderStyle) {
-                                case 'outline':
-                                    stickerPrompt += ', with a thick white vinyl die-cut border';
-                                    break;
-                                case 'dashed':
-                                    stickerPrompt += ', with a dashed cut line around it';
-                                    break;
-                            }
-                            if (stickerHasShadow) {
-                                stickerPrompt += ', with a subtle drop shadow effect';
-                            }
-                            if (stickerBackgroundType === 'transparent') {
-                                stickerPrompt += ', on a plain white background for easy cutting';
-                            } else {
-                                stickerPrompt += `, on a solid ${stickerBackgroundColor} background`;
-                            }
-                            finalPrompt = stickerPrompt;
-                            break;
-                        case ImageStyle.Logo: finalPrompt = `minimalist vector logo for ${basePrompt}, simple, clean, flat design, on a white background`; break;
-                        case ImageStyle.Comic: finalPrompt = `${basePrompt}, in a vibrant comic book art style, bold outlines, cel shading, dynamic action scene`; break;
-                        case ImageStyle.FantasyArt: finalPrompt = `${basePrompt}, epic fantasy art, mythical, magical, highly detailed, digital painting, trending on ArtStation`; break;
-                        case ImageStyle.Sketch: finalPrompt = `${basePrompt}, as a detailed pencil sketch, hand-drawn, charcoal shading, sketchbook style`; break;
-                        case ImageStyle.Abstract: finalPrompt = `${basePrompt}, abstract art, non-representational, vibrant colors, geometric shapes, expressionism`; break;
-                        case ImageStyle.Cinematic: finalPrompt = `${basePrompt}, cinematic movie still, dramatic lighting, high detail, photorealistic, wide angle shot, 8k`; break;
-                    }
-                }
+                const finalPrompt = buildStyledPrompt(prompt);
                 resultBase64 = await geminiService.generateImage(finalPrompt, aspectRatio);
             } else { // Mode.Edit
                 let originalImageForEdit: ImageFile | null = null;
@@ -541,15 +841,25 @@ const App: React.FC = () => {
                 if (editFunction === EditFunction.ControlNet && image1) {
                     const controlNetPrompt = `Create an image of: "${prompt}". The subject in the generated image must strictly follow the pose of the person in the provided reference image.`;
                     resultBase64 = await geminiService.editImage(controlNetPrompt, [image1]);
+                } else if (editFunction === EditFunction.Inpainting && image1) {
+                    const inpaintingPrompt = prompt.trim() ? prompt : 'Melhore a área selecionada de forma criativa.';
+                    const maskFile = await maskEditorRef.current?.getMaskAsImageFile();
+                    if (!maskFile) {
+                        setError("Por favor, pinte a área da imagem que você deseja editar.");
+                        setIsLoading(false);
+                        return;
+                    }
+                    resultBase64 = await geminiService.editImage(inpaintingPrompt, [image1], maskFile);
                 } else if (editFunction === EditFunction.Expand && image1 && expansionAspectRatio) {
                     const paddedImage = await createPaddedImage(image1, expansionAspectRatio);
                     const expansionPrompt = `Fill the transparent areas to naturally expand this image. ${prompt || 'Expand the scene logically.'}`;
                     resultBase64 = await geminiService.editImage(expansionPrompt, [paddedImage]);
-                } else if (editFunction === EditFunction.Inpainting && image1 && maskImage) {
-                    resultBase64 = await geminiService.editImage(prompt, [image1], maskImage);
                 } else if (editFunction === EditFunction.Compose) {
                      const validImages = combineImages.filter(Boolean) as ImageFile[];
-                     resultBase64 = await geminiService.editImage(prompt, validImages);
+                     const finalPrompt = prompt.trim()
+                        ? prompt
+                        : "Analise as imagens fornecidas e combine seus elementos, estilos e temas de forma criativa e harmoniosa para criar uma única imagem coesa e artística. Seja imaginativo na fusão dos conceitos.";
+                     resultBase64 = await geminiService.editImage(finalPrompt, validImages);
                 } else if (editFunction === EditFunction.Restore && image1) {
                     const restorePrompt = `Restaure esta foto antiga e danificada. Remova arranhões, manchas, rasgos, melhore a nitidez e a qualidade geral da imagem, consertando quaisquer imperfeições. ${prompt}`;
                     resultBase64 = await geminiService.editImage(restorePrompt, [image1]);
@@ -569,7 +879,6 @@ const App: React.FC = () => {
                     resultBase64 = await geminiService.editImage(prompt, [image1]);
                 }
             }
-
             if (resultBase64) {
                 const finalImage = `data:image/png;base64,${resultBase64}`;
                 
@@ -579,6 +888,9 @@ const App: React.FC = () => {
                 }));
                 
                 setGeneratedImage(finalImage);
+                if (editFunction === EditFunction.Inpainting) {
+                    setEditFunction(EditFunction.Retouch);
+                }
                 resetImageView();
                 setHistory(prev => [finalImage, ...prev]);
                 if (window.innerWidth < 768) setIsModalOpen(true);
@@ -603,10 +915,11 @@ const App: React.FC = () => {
         }
     };
 
-    const downloadImage = useCallback(() => {
-        if (!generatedImage) return;
+    const downloadImage = useCallback((imageUrl?: string) => {
+        const urlToDownload = imageUrl || generatedImage;
+        if (!urlToDownload) return;
         const link = document.createElement('a');
-        link.href = generatedImage;
+        link.href = urlToDownload;
         link.download = `ai-image-${Date.now()}.png`;
         document.body.appendChild(link);
         link.click();
@@ -622,7 +935,6 @@ const App: React.FC = () => {
         setEditFunction(EditFunction.Retouch);
         setImage1({ base64, mimeType });
         setCombineImages(Array(4).fill(null));
-        setMaskImage(null);
         setShowCombineView(false);
         resetEditHistory();
         resetImageView();
@@ -672,10 +984,13 @@ const App: React.FC = () => {
         setPrompt('');
         setCameraAngle(null);
         setLightingStyle(null);
+        setArtistStyle(null);
         resetEditHistory();
         resetImageView();
         resetCompare();
         setError(null);
+        setShowCombineView(false);
+        setSelectedTrendMode(TrendMode.Doll);
     };
 
     const clearPreview = (imageSlot: 'single' | number) => {
@@ -686,7 +1001,6 @@ const App: React.FC = () => {
         } else { // single
             setImage1(null);
         }
-        setMaskImage(null);
         resetEditHistory();
     };
     
@@ -749,25 +1063,27 @@ const App: React.FC = () => {
     const handlePanEnd = () => {
         setIsDragging(false);
     };
-
-
-    const needsMask = editFunction === EditFunction.Inpainting;
-    const isPromptHidden = mode === Mode.Edit && editFunction === EditFunction.BackgroundRemoval;
+    
+    const isPromptHiddenInEdit = mode === Mode.Edit && editFunction === EditFunction.BackgroundRemoval;
+    const shouldShowPrompt = mode !== Mode.Look && mode !== Mode.Trend && (mode !== Mode.Edit || !isPromptHiddenInEdit);
     
     let promptPlaceholder = "Descreva a imagem que você deseja criar...";
-    if (mode === Mode.Edit && !isPromptHidden) {
+    if (mode === Mode.Edit && !isPromptHiddenInEdit) {
         switch (editFunction) {
-            case EditFunction.Inpainting:
-                promptPlaceholder = "Descreva o que adicionar na área pintada...";
-                break;
             case EditFunction.SelectiveColor:
                 promptPlaceholder = "Ex: Mude a cor do vestido de azul para vermelho";
                 break;
             case EditFunction.Retouch:
                  promptPlaceholder = "Ex: Adicione um chapéu na pessoa; Remova o poste...";
                  break;
+            case EditFunction.Inpainting:
+                 promptPlaceholder = "Descreva o que fazer na área pintada...";
+                 break;
             case EditFunction.ControlNet:
                 promptPlaceholder = "Ex: um astronauta surfando numa onda cósmica";
+                break;
+            case EditFunction.Compose:
+                promptPlaceholder = "Opcional: Descreva como combinar as imagens...";
                 break;
             default:
                  promptPlaceholder = "Opcional: adicione mais instruções...";
@@ -775,6 +1091,19 @@ const App: React.FC = () => {
         }
     }
     
+    let generateButtonText = "🚀 Gerar Imagem";
+    if (mode === Mode.Trend) {
+        if (selectedTrendMode === TrendMode.Doll) {
+            generateButtonText = "✨ Gerar Boneco";
+        } else if (selectedTrendMode === TrendMode.Funko) {
+            generateButtonText = "🦸 Gerar Funko";
+        } else if (selectedTrendMode === TrendMode.Bust) {
+            generateButtonText = "🗿 Gerar Busto";
+        }
+    }
+
+    const showInpaintingEditor = mode === Mode.Edit && editFunction === EditFunction.Inpainting && image1;
+
     return (
         <div className="container mx-auto flex flex-col md:flex-row min-h-screen font-sans text-gray-200">
             {/* LEFT PANEL */}
@@ -783,13 +1112,37 @@ const App: React.FC = () => {
                     <h1 className="panel-title text-2xl font-bold text-white">🎨 Pi AI Studio</h1>
                     <p className="panel-subtitle text-sm text-gray-400">Gerador - Editor de Imagens</p>
                 </header>
+
+                {/* This input is used by multiple components to trigger file upload */}
+                <input type="file" id="imageUpload" accept="image/*" className="hidden" onChange={(e) => handleImageUpload(e.target as HTMLInputElement, 'single')} />
                 
                 <div className="mode-toggle flex bg-black/20 backdrop-blur-sm rounded-lg p-1 border border-gray-700">
-                    <button data-mode="create" className={`mode-btn flex-1 py-2 rounded-md transition-all duration-200 text-sm font-medium ${mode === 'create' ? 'bg-blue-600 text-white' : 'hover:bg-white/10'}`} onClick={() => selectMode(Mode.Create)}>Criar</button>
-                    <button data-mode="edit" className={`mode-btn flex-1 py-2 rounded-md transition-all duration-200 text-sm font-medium ${mode === 'edit' ? 'bg-blue-600 text-white' : 'hover:bg-white/10'}`} onClick={() => selectMode(Mode.Edit)}>Editar</button>
+                    <button data-mode="create" className={`mode-btn flex-1 py-2 rounded-md transition-all duration-200 text-sm font-medium ${mode === Mode.Create ? 'bg-blue-600 text-white' : 'hover:bg-white/10'}`} onClick={() => selectMode(Mode.Create)}>Criar</button>
+                    <button data-mode="edit" className={`mode-btn flex-1 py-2 rounded-md transition-all duration-200 text-sm font-medium ${mode === Mode.Edit ? 'bg-blue-600 text-white' : 'hover:bg-white/10'}`} onClick={() => selectMode(Mode.Edit)}>Editar</button>
+                    <button data-mode="look" className={`mode-btn flex-1 py-2 rounded-md transition-all duration-200 text-sm font-medium ${mode === Mode.Look ? 'bg-blue-600 text-white' : 'hover:bg-white/10'}`} onClick={() => selectMode(Mode.Look)}>Look</button>
+                    <button data-mode="trend" className={`mode-btn flex-1 py-2 rounded-md transition-all duration-200 text-sm font-medium ${mode === Mode.Trend ? 'bg-blue-600 text-white' : 'hover:bg-white/10'}`} onClick={() => selectMode(Mode.Trend)}>Trend</button>
                 </div>
+
+                {mode === Mode.Trend && (
+                    <div id="trendModes" className="functions-section">
+                        <div className="section-title text-base font-semibold mb-2 text-gray-300">Escolha o Estilo</div>
+                        <div className="functions-grid grid grid-cols-2 lg:grid-cols-3 gap-3">
+                            {TREND_MODES.map(fn => (
+                                <FunctionCard 
+                                    key={fn.id}
+                                    data-function={fn.id} 
+                                    className={`function-card flex flex-col items-center justify-center p-3 bg-white/5 backdrop-blur-sm border border-gray-700 rounded-lg cursor-pointer hover:bg-white/10 transition-all duration-200 ${selectedTrendMode === fn.id ? 'ring-2 ring-blue-500' : ''}`}
+                                    onClick={() => setSelectedTrendMode(fn.id)}
+                                >
+                                    <div className="text-2xl">{fn.icon}</div>
+                                    <div className="text-sm font-medium mt-1">{fn.name}</div>
+                                </FunctionCard>
+                            ))}
+                        </div>
+                    </div>
+                )}
                 
-                {!isPromptHidden && (
+                {shouldShowPrompt && (
                     <div className="prompt-section">
                         <div className="section-title text-base font-semibold mb-2 text-gray-300">💭 Descreva sua ideia</div>
                         <div className="relative w-full">
@@ -863,6 +1216,26 @@ const App: React.FC = () => {
                                 >
                                     <option value="">Padrão</option>
                                     {LIGHTING_STYLES.map(style => (
+                                        <option key={style.id} value={style.id}>{style.name}</option>
+                                    ))}
+                                </select>
+                                 <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-400">
+                                    <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/></svg>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="flex flex-col gap-2">
+                            <div className="section-title text-base font-semibold text-gray-300">👨‍🎨 Estilo de Artista</div>
+                            <div className="relative">
+                                <select
+                                    id="artistStyle"
+                                    value={artistStyle || ''}
+                                    onChange={(e) => setArtistStyle(e.target.value as ArtistStyle || null)}
+                                    className="w-full bg-black/20 backdrop-blur-sm border border-gray-600 rounded-md p-3 text-gray-200 focus:ring-2 focus:ring-blue-500 focus:outline-none appearance-none cursor-pointer"
+                                >
+                                    <option value="">Padrão</option>
+                                    {ARTIST_STYLES.map(style => (
                                         <option key={style.id} value={style.id}>{style.name}</option>
                                     ))}
                                 </select>
@@ -994,16 +1367,108 @@ const App: React.FC = () => {
                     </div>
                 )}
                 
-                {mode === 'edit' && !showCombineView && (
+                {mode === Mode.Look && (
+                    <div className="flex flex-col gap-4">
+                        <div id="lookModes" className="functions-section">
+                            <div className="section-title text-base font-semibold mb-2 text-gray-300">Escolha o Tema</div>
+                            <div className="functions-grid grid grid-cols-2 gap-3">
+                                {LOOK_MODES.map(fn => (
+                                    <FunctionCard 
+                                        key={fn.id}
+                                        data-function={fn.id} 
+                                        className={`function-card flex flex-col items-center justify-center p-3 bg-white/5 backdrop-blur-sm border border-gray-700 rounded-lg cursor-pointer hover:bg-white/10 transition-all duration-200 ${selectedLook === fn.id ? 'ring-2 ring-blue-500' : ''}`}
+                                        onClick={() => setSelectedLook(fn.id)}
+                                    >
+                                        <div className="text-2xl">{fn.icon}</div>
+                                        <div className="text-sm font-medium mt-1">{fn.name}</div>
+                                    </FunctionCard>
+                                ))}
+                            </div>
+                        </div>
+
+                        {selectedLook === LookMode.Headshots && (
+                            <div className="p-4 border border-gray-700 rounded-xl space-y-4 bg-black/20">
+                                <h3 className='text-base font-semibold text-gray-300'>Personalizar Fotos</h3>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-400 mb-2">Expressão Facial</label>
+                                    <div className="flex flex-wrap gap-2">
+                                        <RadioPill name="expression" value="Sorrido Amigável" label="Sorrido Amigável" checked={headshotExpression === 'Sorrido Amigável'} onChange={e => setHeadshotExpression(e.target.value)} />
+                                        <RadioPill name="expression" value="Olhar Confiante" label="Olhar Confiante" checked={headshotExpression === 'Olhar Confiante'} onChange={e => setHeadshotExpression(e.target.value)} />
+                                        <RadioPill name="expression" value="Olhar Pensativo" label="Olhar Pensativo" checked={headshotExpression === 'Olhar Pensativo'} onChange={e => setHeadshotExpression(e.target.value)} />
+                                    </div>
+                                </div>
+                                    <div>
+                                    <label className="block text-sm font-medium text-gray-400 mb-2">Pose</label>
+                                        <div className="flex flex-wrap gap-2">
+                                        <RadioPill name="pose" value="Frente" label="De Frente" checked={headshotPose === 'Frente'} onChange={e => setHeadshotPose(e.target.value)} />
+                                        <RadioPill name="pose" value="Ângulo" label="Leve Ângulo" checked={headshotPose === 'Ângulo'} onChange={e => setHeadshotPose(e.target.value)} />
+                                    </div>
+                                </div>
+                                </div>
+                        )}
+
+                        {selectedLook === LookMode.Lookbook && (
+                            <div className="p-4 border border-gray-700 rounded-xl space-y-4 bg-black/20">
+                                <h3 className='text-base font-semibold text-gray-300'>Escolha um Estilo de Moda</h3>
+                                <div className="flex flex-wrap gap-2">
+                                    {LOOKBOOK_STYLES.map(style => (
+                                        <RadioPill 
+                                            key={style} name="style" value={style} label={style} checked={lookbookStyle === style} 
+                                            onChange={e => { setLookbookStyle(e.target.value); setCustomLookbookStyle(''); }}
+                                        />
+                                    ))}
+                                    <RadioPill name="style" value="Outro" label="Outro..." checked={lookbookStyle === 'Outro'} onChange={e => setLookbookStyle(e.target.value)} />
+                                </div>
+                                {lookbookStyle === 'Outro' && (
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-400 mb-2">Seu Estilo Personalizado</label>
+                                        <input
+                                            type="text"
+                                            placeholder="Ex: Cyberpunk, Avant-garde"
+                                            value={customLookbookStyle}
+                                            onChange={(e) => setCustomLookbookStyle(e.target.value)}
+                                            className="w-full bg-gray-800 border border-gray-600 rounded-lg py-2 px-3 focus:outline-none focus:ring-2 focus:ring-blue-500 text-white"
+                                        />
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        <div className="flex flex-col gap-3">
+                            <div className="section-title text-base font-semibold text-gray-300">
+                                {selectedLook === LookMode.Headshots ? 'Escolha um Look' : 'Escolha uma Pose'}
+                            </div>
+                            {(
+                                selectedLook === LookMode.Headshots ? HEADSHOT_PROMPTS :
+                                selectedLook === LookMode.Lookbook ? LOOKBOOK_PROMPTS :
+                                []
+                            ).map(promptData => (
+                                <div key={promptData.id} className="bg-black/20 p-3 rounded-lg border border-gray-700 flex items-center justify-between gap-4">
+                                    <div className="flex-grow">
+                                        <div className="font-semibold text-gray-300">{promptData.id}</div>
+                                        <p className="text-xs text-gray-400">{promptData.base}</p>
+                                    </div>
+                                    <button 
+                                        onClick={() => generateSingleTrendImage(promptData)}
+                                        disabled={isLoading}
+                                        className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg flex items-center justify-center transition-all duration-200 disabled:bg-gray-500 disabled:cursor-not-allowed w-28 text-sm shrink-0"
+                                    >
+                                        {isLoading && activelyGeneratingTrend === promptData.id ? (
+                                            <div className="spinner w-5 h-5 border-2 border-t-transparent border-white rounded-full animate-spin"></div>
+                                        ) : (
+                                            'Gerar'
+                                        )}
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+
+                {(mode === Mode.Edit && !showCombineView && !showInpaintingEditor) && (
                     <div className="dynamic-content mt-4">
-                        {image1 && needsMask ? (
-                             <ImageMaskEditor 
-                                key={image1.base64} // Force re-mount on image change
-                                imageSrc={`data:${image1.mimeType};base64,${image1.base64}`} 
-                                onMaskChange={setMaskImage} 
-                                title={"Pinte a área para alterar"}
-                             />
-                        ) : image1 && editFunction === EditFunction.Expand ? (
+                        {image1 && editFunction === EditFunction.Expand ? (
                             <div className="flex flex-col gap-3">
                                 <div className="text-base font-semibold text-gray-300">Selecione a proporção para expandir</div>
                                 <div className="relative group">
@@ -1025,37 +1490,38 @@ const App: React.FC = () => {
                                     </button>
                                 </div>
                             </div>
-                        ) : (
-                            <div className={`upload-area relative group p-6 flex flex-col items-center justify-center border-2 border-dashed border-gray-600 rounded-lg text-center transition-all ${image1 ? 'has-image' : ''}`}>
-                               {!image1 ? (
-                                <>
-                                    <div className="flex flex-col items-center justify-center cursor-pointer" onClick={() => document.getElementById('imageUpload')?.click()}>
-                                        <div className="text-4xl opacity-50">📁</div>
-                                        <div className="font-semibold mt-2">{editFunction === EditFunction.ControlNet ? 'Imagem de Referência (Pose)' : 'Clique para selecionar'}</div>
-                                        <div className="upload-text text-xs text-gray-400">PNG, JPG, WebP</div>
-                                    </div>
-                                    <div className="text-gray-400 my-2">ou</div>
-                                    <button
-                                        onClick={() => setCameraForSlot('single')}
-                                        className="bg-gray-700 hover:bg-gray-600 text-white font-semibold py-2 px-4 rounded-lg flex items-center gap-2 transition-colors"
-                                    >
-                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M4 5a2 2 0 00-2 2v8a2 2 0 002 2h12a2 2 0 002-2V7a2 2 0 00-2-2h-1.586a1 1 0 01-.707-.293l-1.121-1.121A2 2 0 0011.172 3H8.828a2 2 0 00-1.414.586L6.293 4.707A1 1 0 015.586 5H4zm6 8a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd" /></svg>
-                                        Tirar Foto
-                                    </button>
-                                </>
-                               ) : (
-                                <>
-                                    <img src={`data:${image1.mimeType};base64,${image1.base64}`} className="absolute inset-0 w-full h-full object-cover rounded-lg" alt="Preview"/>
-                                    <button onClick={(e) => {e.stopPropagation(); clearPreview('single')}} className="absolute top-2 right-2 bg-red-600 text-white rounded-full h-6 w-6 text-sm flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">&times;</button>
-                                </>
-                               )}
-                                <input type="file" id="imageUpload" accept="image/*" className="hidden" onChange={(e) => handleImageUpload(e.target as HTMLInputElement, 'single')} />
-                            </div>
-                        )}
+                        ) : null }
                     </div>
                 )}
+                 
+                 {((mode === Mode.Edit && !showCombineView && !(image1 && editFunction === EditFunction.Expand) && !showInpaintingEditor) || mode === Mode.Look || mode === Mode.Trend) ? (
+                     <div className={`upload-area mt-4 relative group p-6 flex flex-col items-center justify-center border-2 border-dashed border-gray-600 rounded-lg text-center transition-all ${image1 ? 'has-image' : ''}`}>
+                       {!image1 ? (
+                        <>
+                            <div className="flex flex-col items-center justify-center cursor-pointer" onClick={() => document.getElementById('imageUpload')?.click()}>
+                                <div className="text-4xl opacity-50">📁</div>
+                                <div className="font-semibold mt-2">{editFunction === EditFunction.ControlNet ? 'Imagem de Referência (Pose)' : 'Clique para selecionar'}</div>
+                                <div className="upload-text text-xs text-gray-400">PNG, JPG, WebP</div>
+                            </div>
+                            <div className="text-gray-400 my-2">ou</div>
+                            <button
+                                onClick={() => setCameraForSlot('single')}
+                                className="bg-gray-700 hover:bg-gray-600 text-white font-semibold py-2 px-4 rounded-lg flex items-center gap-2 transition-colors"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M4 5a2 2 0 00-2 2v8a2 2 0 002 2h12a2 2 0 002-2V7a2 2 0 00-2-2h-1.586a1 1 0 01-.707-.293l-1.121-1.121A2 2 0 0011.172 3H8.828a2 2 0 00-1.414.586L6.293 4.707A1 1 0 015.586 5H4zm6 8a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd" /></svg>
+                                Tirar Foto
+                            </button>
+                        </>
+                       ) : (
+                        <>
+                            <img src={`data:${image1.mimeType};base64,${image1.base64}`} className="absolute inset-0 w-full h-full object-cover rounded-lg" alt="Preview"/>
+                            <button onClick={(e) => {e.stopPropagation(); clearPreview('single')}} className="absolute top-2 right-2 bg-red-600 text-white rounded-full h-6 w-6 text-sm flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">&times;</button>
+                        </>
+                       )}
+                    </div>
+                ): null}
                 
-                {history.length > 0 && (
+                {history.length > 0 && mode !== Mode.Look && (
                     <div className="flex flex-col gap-2">
                         <div className="section-title text-base font-semibold text-gray-300">📜 Histórico</div>
                         <div className="grid grid-cols-4 gap-2 max-h-36 overflow-y-auto pr-2">
@@ -1074,32 +1540,58 @@ const App: React.FC = () => {
 
                 <div className="mt-auto pt-4">
                      {error && <div className="text-red-400 text-sm mb-2 text-center">{error}</div>}
-                     <button id="generateBtn" className="generate-btn w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center transition-all duration-200 disabled:bg-gray-500 disabled:cursor-not-allowed" onClick={generateImage} disabled={isLoading}>
-                        {isLoading ? (
-                           <div className="spinner w-6 h-6 border-4 border-t-transparent border-white rounded-full animate-spin"></div>
-                        ) : (
-                           <span className="btn-text">🚀 Gerar Imagem</span>
-                        )}
-                    </button>
+                    {mode !== Mode.Look ? (
+                        <button id="generateBtn" className="generate-btn w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center transition-all duration-200 disabled:bg-gray-500 disabled:cursor-not-allowed" onClick={generateImage} disabled={isLoading}>
+                            {isLoading ? (
+                            <div className="spinner w-6 h-6 border-4 border-t-transparent border-white rounded-full animate-spin"></div>
+                            ) : (
+                            <span className="btn-text">{generateButtonText}</span>
+                            )}
+                        </button>
+                    ) : (
+                        <div className="text-center text-sm text-gray-400 bg-black/20 p-3 rounded-lg border border-gray-700">
+                            Selecione uma pose ou look acima e gere sua imagem individualmente.
+                        </div>
+                    )}
                 </div>
             </div>
 
             {/* RIGHT PANEL */}
-            <div className="right-panel w-full md:w-2/3 lg:flex-1 p-6 flex items-center justify-center relative hidden md:flex">
-                 {!generatedImage && !isLoading && (
+            <div className="right-panel w-full md:w-2/3 lg:flex-1 p-6 flex items-center justify-center relative hidden md:flex flex-col">
+                 {showInpaintingEditor ? (
+                    <ImageMaskEditor ref={maskEditorRef} imageFile={image1} />
+                ) : !generatedImage && !isLoading ? (
                     <div id="resultPlaceholder" className="result-placeholder text-center text-gray-500">
-                        <div className="result-placeholder-icon text-6xl">🎨</div>
-                        <div className="mt-4 text-xl">Sua obra de arte aparecerá aqui</div>
+                        <div className="result-placeholder-icon text-6xl">
+                            {mode === Mode.Look ? '👗' : mode === Mode.Trend ? (
+                                selectedTrendMode === TrendMode.Doll ? '🧍' :
+                                selectedTrendMode === TrendMode.Bust ? '🗿' :
+                                selectedTrendMode === TrendMode.Funko ? '🦸' : '🎨'
+                            ) : '🎨'}
+                        </div>
+                        <div className="mt-4 text-xl">
+                            {mode === Mode.Look ? 'Sua foto do look aparecerá aqui' :
+                             mode === Mode.Trend ? (
+                                selectedTrendMode === TrendMode.Doll ? 'Seu boneco personalizado aparecerá aqui' :
+                                selectedTrendMode === TrendMode.Bust ? 'Seu busto de escultura aparecerá aqui' :
+                                selectedTrendMode === TrendMode.Funko ? 'Seu Funko personalizado aparecerá aqui' : 'Sua obra de arte aparecerá aqui'
+                             ) :
+                             'Sua obra de arte aparecerá aqui'}
+                        </div>
+                        {mode === Mode.Look && <div className="text-gray-600 mt-2">Envie uma foto, escolha um tema e gere uma imagem.</div>}
+                        {mode === Mode.Trend && <div className="text-gray-600 mt-2">Envie uma foto para transformá-la.</div>}
                     </div>
-                 )}
-                 {isLoading && (
+                ) : isLoading ? (
                     <div id="loadingContainer" className="loading-container text-center text-white">
                         <div className="loading-spinner w-16 h-16 border-8 border-t-transparent border-blue-500 rounded-full animate-spin mx-auto"></div>
-                        <div className="loading-text mt-4 text-xl">Gerando sua imagem...</div>
+                        <div className="loading-text mt-4 text-xl">
+                           {mode === Mode.Look && activelyGeneratingTrend
+                                ? `Gerando: ${activelyGeneratingTrend}...`
+                                : 'Gerando sua imagem...'}
+                        </div>
                     </div>
-                 )}
-                 {generatedImage && !isLoading && (
-                     <div 
+                ) : generatedImage && (
+                    <div 
                         id="imageContainer" 
                         className="image-container relative w-full h-full flex items-center justify-center overflow-hidden"
                         onWheel={isComparing ? undefined : handleWheelZoom}
@@ -1110,7 +1602,7 @@ const App: React.FC = () => {
                         onTouchStart={isComparing ? undefined : handlePanStart}
                         onTouchMove={isComparing ? undefined : handlePanMove}
                         onTouchEnd={handlePanEnd}
-                     >
+                    >
                         {isComparing && originalForCompare ? (
                             <ImageCompareSlider
                                 beforeSrc={`data:${originalForCompare.mimeType};base64,${originalForCompare.base64}`}
@@ -1144,7 +1636,7 @@ const App: React.FC = () => {
                                 <button className="action-btn bg-gray-800/80 hover:bg-gray-700 text-white font-bold p-2 rounded-full backdrop-blur-sm transition disabled:opacity-50 disabled:cursor-not-allowed" onClick={handleUndo} disabled={editHistory.undo.length === 0} title="Desfazer">↩️</button>
                                 <button className="action-btn bg-gray-800/80 hover:bg-gray-700 text-white font-bold p-2 rounded-full backdrop-blur-sm transition disabled:opacity-50 disabled:cursor-not-allowed" onClick={handleRedo} disabled={editHistory.redo.length === 0} title="Refazer">↪️</button>
                                 <button className="action-btn bg-gray-800/80 hover:bg-gray-700 text-white font-bold p-2 rounded-full backdrop-blur-sm transition" onClick={editCurrentImage} title="Editar">✏️</button>
-                                <button className="action-btn bg-gray-800/80 hover:bg-gray-700 text-white font-bold p-2 rounded-full backdrop-blur-sm transition" onClick={downloadImage} title="Download">💾</button>
+                                <button className="action-btn bg-gray-800/80 hover:bg-gray-700 text-white font-bold p-2 rounded-full backdrop-blur-sm transition" onClick={() => downloadImage()} title="Download">💾</button>
                             </div>
                             {!isComparing && (
                                 <div className="flex gap-1 bg-gray-800/80 backdrop-blur-sm rounded-full p-1 text-lg">
@@ -1155,7 +1647,7 @@ const App: React.FC = () => {
                             )}
                         </div>
                     </div>
-                 )}
+                )}
             </div>
             
             {/* MOBILE MODAL */}

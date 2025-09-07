@@ -1,5 +1,5 @@
 {
-  "name": "Pi AI Studio",
+  "name": "Pi AI Studio V2",
   "description": "A professional AI-powered application to generate and edit images using text prompts and existing images. Supports various creative modes like sticker creation, logo design, comic style, and advanced editing functions.",
   "requestFramePermissions": [
     "camera"

@@ -1,4 +1,5 @@
 
+
 import { GoogleGenAI, Modality, GenerateContentResponse } from "@google/genai";
 import type { ImageFile } from '../types';
 
@@ -9,6 +10,19 @@ if (!process.env.API_KEY) {
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 export const geminiService = {
+  generateText: async (prompt: string): Promise<string> => {
+    try {
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: prompt,
+      });
+      return response.text;
+    } catch (error) {
+      console.error("Error generating text:", error);
+      throw new Error("Failed to generate text with Gemini API.");
+    }
+  },
+
   generateImage: async (prompt: string, aspectRatio: string): Promise<string> => {
     try {
       const response = await ai.models.generateImages({
@@ -31,9 +45,12 @@ export const geminiService = {
     }
   },
 
-  editImage: async (prompt: string, images: ImageFile[], mask?: ImageFile): Promise<string> => {
+  editImage: async (prompt: string, images: ImageFile[], mask?: ImageFile | null): Promise<string> => {
     try {
       const parts: any[] = [];
+
+      // Add prompt first, as required by the API for editing/inpainting.
+      parts.push({ text: prompt });
 
       // Add all main images
       images.forEach(image => {
@@ -45,7 +62,7 @@ export const geminiService = {
         });
       });
       
-      // Add mask if it exists
+      // Add mask if provided for inpainting
       if (mask) {
         parts.push({
           inlineData: {
@@ -54,9 +71,6 @@ export const geminiService = {
           },
         });
       }
-      
-      // Add prompt last
-      parts.push({ text: prompt });
       
       const response: GenerateContentResponse = await ai.models.generateContent({
         model: 'gemini-2.5-flash-image-preview',

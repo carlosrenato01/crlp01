@@ -1,5 +1,5 @@
 {
-  "name": "pi-ai-studio",
+  "name": "pi-ai-studio-v2",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -11,7 +11,8 @@
   "dependencies": {
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
-    "@google/genai": "^1.17.0"
+    "@google/genai": "^1.17.0",
+    "framer-motion": "^11.3.11"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",

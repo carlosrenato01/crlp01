@@ -6,6 +6,8 @@
     <title>Gerador de Imagens Profissional</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
+        @import url('https://fonts.googleapis.com/css2?family=Caveat:wght@700&family=Inter:wght@400;500;600;700&display=swap');
+        
         /* Custom scrollbar for a better aesthetic in dark mode */
         ::-webkit-scrollbar {
             width: 8px;
@@ -74,6 +76,19 @@
             -webkit-backdrop-filter: blur(10px);
         }
 
+        /* Styles for PictureMe component */
+        .font-caveat { font-family: 'Caveat', cursive; }
+        
+        @keyframes fade-in-down {
+          0% { opacity: 0; transform: translateY(-20px); }
+          100% { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fade-in-down { animation: fade-in-down 0.5s ease-out forwards; }
+
+         .styled-scrollbar::-webkit-scrollbar { width: 8px; }
+         .styled-scrollbar::-webkit-scrollbar-track { background: #334155; border-radius: 10px; }
+         .styled-scrollbar::-webkit-scrollbar-thumb { background: #64748B; border-radius: 10px; }
+         .styled-scrollbar::-webkit-scrollbar-thumb:hover { background: #FBBF24; }
     </style>
 <script type="importmap">
 {
@@ -81,7 +96,8 @@
     "react/": "https://aistudiocdn.com/react@^19.1.1/",
     "react": "https://aistudiocdn.com/react@^19.1.1",
     "react-dom/": "https://aistudiocdn.com/react-dom@^19.1.1/",
-    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.17.0"
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.17.0",
+    "framer-motion": "https://aistudiocdn.com/framer-motion@^11.3.11"
   }
 }
 </script>
